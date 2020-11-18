@@ -1,9 +1,12 @@
 language: python
+
 sudo: false
+
 python:
   - 3.6
   - 3.7
   - 3.8
+
 cache: pip
 
 install:
@@ -15,3 +18,11 @@ script:
 after_success:
   - pip install coveralls
   - coveralls
+
+deploy:
+  provider: pypi
+  on:
+    tags: true
+  username: "__token__"
+  password:
+    secure: JXRF5UrIODaplk9i9LMv3Ao9LZM0nqqEamhGpVVeLe6fIY9b70n/8kI6b6tzbWhvGtj1lsPx6x9Lhnm5X6VTEZVssFY30Rr8POnm1UfwMopWNz18a2KqDmzBas/+oIrbqtobaWy2OaDMPF5f/bQ0fqFl2GxmR/2Yw00/ZK+cL9AHYd9HJ9HAeKmmPLRVxuuobaUmg33tgfXhtmuVh3jQ7rXMuRXcNmAsk1I0glFVRznNcZiXnTELvMGwdg6BanjCbamd13vjjP1Pn2K+wCUDhatcDYs2UAftX6FS9WBv0mrFiGkItb+YeChfeA09aJ++2AgRS7zHHWjD8tlTQrlh1JIHwFhVFKlt+DMoLv0MRaIqzLtfNmUlIniv1HEN7vESdIyvEEUq3dHHNhH0Wrj1Es62gYKzwH66ciEVimn3hzzuAea0+INwb+B0LG8Dxb2lrB2lGk+ewIYPdr7XX0RJ+ytH0Ig6ItcLD5eCWG1Fz6G4OU8zBdHdcCwo/kHdoPdqIN9rQl3aPBXpxoPMvcFH97xfbtS4cCgFXMWmkCGYed0fMAUe/p5DJVKphJxEp1js8oBsSbBJGLU1Cy2kBRUB5J1YIr0+WZ1L9o43fOTVNe10vbtyftV3chghPDI0QXAvuvDApDa2Tk6t0pv0BCu12T65gWXS0Bp7FXVWlzr7rHk=
