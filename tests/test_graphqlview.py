@@ -2,40 +2,22 @@ import json
 from io import StringIO
 from urllib.parse import urlencode
 
+from chalice.test import Client
 import pytest
-from flask import url_for
 
-from .app import create_app
-
+from .app import app
 
 @pytest.fixture
-def app(request):
-    # import app factory pattern
-    app = create_app()
-
-    # pushes an application context manually
-    ctx = app.app_context()
-    ctx.push()
-    return app
+def test_client():
+    with Client(app) as client:
+        yield client
 
 
-@pytest.fixture
-def client(app):
-    return app.test_client()
-
-
-def url_string(app, **url_params):
-    with app.test_request_context():
-        string = url_for("graphql")
-
+def url_string(path, **url_params):
     if url_params:
-        string += "?" + urlencode(url_params)
+        path += "?" + urlencode(url_params)
 
-    return string
-
-
-def response_json(response):
-    return json.loads(response.data.decode())
+    return path
 
 
 def json_dump_kwarg(**kwargs):
@@ -46,30 +28,37 @@ def json_dump_kwarg_list(**kwargs):
     return json.dumps([kwargs])
 
 
-def test_allows_get_with_query_param(app, client):
-    response = client.get(url_string(app, query="{test}"))
+def test_index(test_client):
+    response = test_client.http.get('/')
 
     assert response.status_code == 200
-    assert response_json(response) == {"data": {"test": "Hello World"}}
+    assert response.json_body == {'hello': 'world'}
 
 
-def test_allows_get_with_variable_values(app, client):
-    response = client.get(
+def test_allows_get_with_query_param(test_client):
+    response = test_client.http.get(url_string('/graphql', query="{test}"))
+
+    assert response.status_code == 200
+    assert response.json_body == {"data": {"test": "Hello World"}}
+
+
+def test_allows_get_with_variable_values(test_client):
+    response = test_client.http.get(
         url_string(
-            app,
+            '/graphql',
             query="query helloWho($who: String){ test(who: $who) }",
             variables=json.dumps({"who": "Dolly"}),
         )
     )
 
     assert response.status_code == 200
-    assert response_json(response) == {"data": {"test": "Hello Dolly"}}
+    assert response.json_body == {"data": {"test": "Hello Dolly"}}
 
 
-def test_allows_get_with_operation_name(app, client):
-    response = client.get(
+def test_allows_get_with_operation_name(test_client):
+    response = test_client.http.get(
         url_string(
-            app,
+            '/graphql',
             query="""
         query helloYou { test(who: "You"), ...shared }
         query helloWorld { test(who: "World"), ...shared }
@@ -83,16 +72,16 @@ def test_allows_get_with_operation_name(app, client):
     )
 
     assert response.status_code == 200
-    assert response_json(response) == {
+    assert response.json_body == {
         "data": {"test": "Hello World", "shared": "Hello Everyone"}
     }
 
 
-def test_reports_validation_errors(app, client):
-    response = client.get(url_string(app, query="{ test, unknownOne, unknownTwo }"))
+def test_reports_validation_errors(test_client):
+    response = test_client.http.get(url_string('/graphql', query="{ test, unknownOne, unknownTwo }"))
 
     assert response.status_code == 400
-    assert response_json(response) == {
+    assert response.json_body == {
         "errors": [
             {
                 "message": "Cannot query field 'unknownOne' on type 'QueryRoot'.",
@@ -108,10 +97,10 @@ def test_reports_validation_errors(app, client):
     }
 
 
-def test_errors_when_missing_operation_name(app, client):
-    response = client.get(
+def test_errors_when_missing_operation_name(test_client):
+    response = test_client.http.get(
         url_string(
-            app,
+            '/graphql',
             query="""
         query TestQuery { test }
         mutation TestMutation { writeTest { test } }
@@ -120,7 +109,7 @@ def test_errors_when_missing_operation_name(app, client):
     )
 
     assert response.status_code == 400
-    assert response_json(response) == {
+    assert response.json_body == {
         "errors": [
             {
                 "message": "Must provide operation name if query contains multiple operations.",  # noqa: E501
@@ -131,17 +120,17 @@ def test_errors_when_missing_operation_name(app, client):
     }
 
 
-def test_errors_when_sending_a_mutation_via_get(app, client):
-    response = client.get(
+def test_errors_when_sending_a_mutation_via_get(test_client):
+    response = test_client.http.get(
         url_string(
-            app,
+            '/graphql',
             query="""
         mutation TestMutation { writeTest { test } }
         """,
         )
     )
     assert response.status_code == 405
-    assert response_json(response) == {
+    assert response.json_body == {
         "errors": [
             {
                 "message": "Can only perform a mutation operation from a POST request.",
@@ -152,10 +141,10 @@ def test_errors_when_sending_a_mutation_via_get(app, client):
     }
 
 
-def test_errors_when_selecting_a_mutation_within_a_get(app, client):
-    response = client.get(
+def test_errors_when_selecting_a_mutation_within_a_get(test_client):
+    response = test_client.http.get(
         url_string(
-            app,
+            '/graphql',
             query="""
         query TestQuery { test }
         mutation TestMutation { writeTest { test } }
@@ -165,7 +154,7 @@ def test_errors_when_selecting_a_mutation_within_a_get(app, client):
     )
 
     assert response.status_code == 405
-    assert response_json(response) == {
+    assert response.json_body == {
         "errors": [
             {
                 "message": "Can only perform a mutation operation from a POST request.",
@@ -176,10 +165,10 @@ def test_errors_when_selecting_a_mutation_within_a_get(app, client):
     }
 
 
-def test_allows_mutation_to_exist_within_a_get(app, client):
-    response = client.get(
+def test_allows_mutation_to_exist_within_a_get(test_client):
+    response = test_client.http.get(
         url_string(
-            app,
+            '/graphql',
             query="""
         query TestQuery { test }
         mutation TestMutation { writeTest { test } }
@@ -189,123 +178,123 @@ def test_allows_mutation_to_exist_within_a_get(app, client):
     )
 
     assert response.status_code == 200
-    assert response_json(response) == {"data": {"test": "Hello World"}}
+    assert response.json_body == {"data": {"test": "Hello World"}}
 
 
-def test_allows_post_with_json_encoding(app, client):
-    response = client.post(
-        url_string(app),
-        data=json_dump_kwarg(query="{test}"),
-        content_type="application/json",
+def test_allows_post_with_json_encoding(test_client):
+    response = test_client.http.post(
+        url_string('/graphql'),
+        body=json_dump_kwarg(query="{test}"),
+        headers={'Content-Type': 'application/json'},
     )
 
     assert response.status_code == 200
-    assert response_json(response) == {"data": {"test": "Hello World"}}
+    assert response.json_body == {"data": {"test": "Hello World"}}
 
 
-def test_allows_sending_a_mutation_via_post(app, client):
-    response = client.post(
-        url_string(app),
-        data=json_dump_kwarg(query="mutation TestMutation { writeTest { test } }"),
-        content_type="application/json",
+def test_allows_sending_a_mutation_via_post(test_client):
+    response = test_client.http.post(
+        url_string('/graphql'),
+        body=json_dump_kwarg(query="mutation TestMutation { writeTest { test } }"),
+        headers={'Content-Type': 'application/json'},
     )
 
     assert response.status_code == 200
-    assert response_json(response) == {"data": {"writeTest": {"test": "Hello World"}}}
+    assert response.json_body == {"data": {"writeTest": {"test": "Hello World"}}}
 
 
-def test_allows_post_with_url_encoding(app, client):
-    response = client.post(
-        url_string(app),
-        data=urlencode(dict(query="{test}")),
-        content_type="application/x-www-form-urlencoded",
+def test_allows_post_with_url_encoding(test_client):
+    response = test_client.http.post(
+        url_string('/graphql'),
+        body=urlencode(dict(query="{test}")),
+        headers={'Content-Type': 'application/x-www-form-urlencoded'},
     )
 
     assert response.status_code == 200
-    assert response_json(response) == {"data": {"test": "Hello World"}}
+    assert response.json_body == {"data": {"test": "Hello World"}}
 
 
-def test_supports_post_json_query_with_string_variables(app, client):
-    response = client.post(
-        url_string(app),
-        data=json_dump_kwarg(
+def test_supports_post_json_query_with_string_variables(test_client):
+    response = test_client.http.post(
+        url_string('/graphql'),
+        body=json_dump_kwarg(
             query="query helloWho($who: String){ test(who: $who) }",
             variables=json.dumps({"who": "Dolly"}),
         ),
-        content_type="application/json",
+        headers={'Content-Type': 'application/json'},
     )
 
     assert response.status_code == 200
-    assert response_json(response) == {"data": {"test": "Hello Dolly"}}
+    assert response.json_body == {"data": {"test": "Hello Dolly"}}
 
 
-def test_supports_post_json_query_with_json_variables(app, client):
-    response = client.post(
-        url_string(app),
-        data=json_dump_kwarg(
+def test_supports_post_json_query_with_json_variables(test_client):
+    response = test_client.http.post(
+        url_string('/graphql'),
+        body=json_dump_kwarg(
             query="query helloWho($who: String){ test(who: $who) }",
             variables={"who": "Dolly"},
         ),
-        content_type="application/json",
+        headers={'Content-Type': 'application/json'},
     )
 
     assert response.status_code == 200
-    assert response_json(response) == {"data": {"test": "Hello Dolly"}}
+    assert response.json_body == {"data": {"test": "Hello Dolly"}}
 
 
-def test_supports_post_url_encoded_query_with_string_variables(app, client):
-    response = client.post(
-        url_string(app),
-        data=urlencode(
+def test_supports_post_url_encoded_query_with_string_variables(test_client):
+    response = test_client.http.post(
+        url_string('/graphql'),
+        body=urlencode(
             dict(
                 query="query helloWho($who: String){ test(who: $who) }",
                 variables=json.dumps({"who": "Dolly"}),
             )
         ),
-        content_type="application/x-www-form-urlencoded",
+        headers={'Content-Type': 'application/x-www-form-urlencoded'},
     )
 
     assert response.status_code == 200
-    assert response_json(response) == {"data": {"test": "Hello Dolly"}}
+    assert response.json_body == {"data": {"test": "Hello Dolly"}}
 
 
-def test_supports_post_json_quey_with_get_variable_values(app, client):
-    response = client.post(
-        url_string(app, variables=json.dumps({"who": "Dolly"})),
-        data=json_dump_kwarg(query="query helloWho($who: String){ test(who: $who) }",),
-        content_type="application/json",
+def test_supports_post_json_quey_with_get_variable_values(test_client):
+    response = test_client.http.post(
+        url_string('/graphql', variables=json.dumps({"who": "Dolly"})),
+        body=json_dump_kwarg(query="query helloWho($who: String){ test(who: $who) }",),
+        headers={'Content-Type': 'application/json'},
     )
 
     assert response.status_code == 200
-    assert response_json(response) == {"data": {"test": "Hello Dolly"}}
+    assert response.json_body == {"data": {"test": "Hello Dolly"}}
 
 
-def test_post_url_encoded_query_with_get_variable_values(app, client):
-    response = client.post(
-        url_string(app, variables=json.dumps({"who": "Dolly"})),
-        data=urlencode(dict(query="query helloWho($who: String){ test(who: $who) }",)),
-        content_type="application/x-www-form-urlencoded",
+def test_post_url_encoded_query_with_get_variable_values(test_client):
+    response = test_client.http.post(
+        url_string('/graphql', variables=json.dumps({"who": "Dolly"})),
+        body=urlencode(dict(query="query helloWho($who: String){ test(who: $who) }",)),
+        headers={'Content-Type': 'application/x-www-form-urlencoded'},
     )
 
     assert response.status_code == 200
-    assert response_json(response) == {"data": {"test": "Hello Dolly"}}
+    assert response.json_body == {"data": {"test": "Hello Dolly"}}
 
 
-def test_supports_post_raw_text_query_with_get_variable_values(app, client):
-    response = client.post(
-        url_string(app, variables=json.dumps({"who": "Dolly"})),
-        data="query helloWho($who: String){ test(who: $who) }",
-        content_type="application/graphql",
+def test_supports_post_raw_text_query_with_get_variable_values(test_client):
+    response = test_client.http.post(
+        url_string('/graphql', variables=json.dumps({"who": "Dolly"})),
+        body="query helloWho($who: String){ test(who: $who) }",
+        headers={'Content-Type': 'application/graphql'},
     )
 
     assert response.status_code == 200
-    assert response_json(response) == {"data": {"test": "Hello Dolly"}}
+    assert response.json_body == {"data": {"test": "Hello Dolly"}}
 
 
-def test_allows_post_with_operation_name(app, client):
-    response = client.post(
-        url_string(app),
-        data=json_dump_kwarg(
+def test_allows_post_with_operation_name(test_client):
+    response = test_client.http.post(
+        url_string('/graphql'),
+        body=json_dump_kwarg(
             query="""
         query helloYou { test(who: "You"), ...shared }
         query helloWorld { test(who: "World"), ...shared }
@@ -316,19 +305,19 @@ def test_allows_post_with_operation_name(app, client):
         """,
             operationName="helloWorld",
         ),
-        content_type="application/json",
+        headers={'Content-Type': 'application/json'},
     )
 
     assert response.status_code == 200
-    assert response_json(response) == {
+    assert response.json_body == {
         "data": {"test": "Hello World", "shared": "Hello Everyone"}
     }
 
 
-def test_allows_post_with_get_operation_name(app, client):
-    response = client.post(
-        url_string(app, operationName="helloWorld"),
-        data="""
+def test_allows_post_with_get_operation_name(test_client):
+    response = test_client.http.post(
+        url_string('/graphql', operationName="helloWorld"),
+        body="""
     query helloYou { test(who: "You"), ...shared }
     query helloWorld { test(who: "World"), ...shared }
     query helloDolly { test(who: "Dolly"), ...shared }
@@ -336,43 +325,33 @@ def test_allows_post_with_get_operation_name(app, client):
       shared: test(who: "Everyone")
     }
     """,
-        content_type="application/graphql",
+        headers={'Content-Type': 'application/graphql'},
     )
 
     assert response.status_code == 200
-    assert response_json(response) == {
+    assert response.json_body == {
         "data": {"test": "Hello World", "shared": "Hello Everyone"}
     }
 
 
-@pytest.mark.parametrize("app", [create_app(pretty=True)])
-def test_supports_pretty_printing(app, client):
-    response = client.get(url_string(app, query="{test}"))
+def test_not_pretty_by_default(test_client):
+    response = test_client.http.get(url_string('/graphql', query="{test}"))
 
-    assert response.data.decode() == (
+    assert response.body.decode() == '{"data":{"test":"Hello World"}}'
+
+
+def test_supports_pretty_printing_by_request(test_client):
+    response = test_client.http.get(url_string('/graphql', query="{test}", pretty="1"))
+
+    assert response.body.decode() == (
         "{\n" '  "data": {\n' '    "test": "Hello World"\n' "  }\n" "}"
     )
 
 
-@pytest.mark.parametrize("app", [create_app(pretty=False)])
-def test_not_pretty_by_default(app, client):
-    response = client.get(url_string(app, query="{test}"))
-
-    assert response.data.decode() == '{"data":{"test":"Hello World"}}'
-
-
-def test_supports_pretty_printing_by_request(app, client):
-    response = client.get(url_string(app, query="{test}", pretty="1"))
-
-    assert response.data.decode() == (
-        "{\n" '  "data": {\n' '    "test": "Hello World"\n' "  }\n" "}"
-    )
-
-
-def test_handles_field_errors_caught_by_graphql(app, client):
-    response = client.get(url_string(app, query="{thrower}"))
+def test_handles_field_errors_caught_by_graphql(test_client):
+    response = test_client.http.get(url_string('/graphql', query="{thrower}"))
     assert response.status_code == 200
-    assert response_json(response) == {
+    assert response.json_body == {
         "errors": [
             {
                 "locations": [{"column": 2, "line": 1}],
@@ -384,10 +363,10 @@ def test_handles_field_errors_caught_by_graphql(app, client):
     }
 
 
-def test_handles_syntax_errors_caught_by_graphql(app, client):
-    response = client.get(url_string(app, query="syntaxerror"))
+def test_handles_syntax_errors_caught_by_graphql(test_client):
+    response = test_client.http.get(url_string('/graphql', query="syntaxerror"))
     assert response.status_code == 400
-    assert response_json(response) == {
+    assert response.json_body == {
         "errors": [
             {
                 "locations": [{"column": 1, "line": 1}],
@@ -398,22 +377,22 @@ def test_handles_syntax_errors_caught_by_graphql(app, client):
     }
 
 
-def test_handles_errors_caused_by_a_lack_of_query(app, client):
-    response = client.get(url_string(app))
+def test_handles_errors_caused_by_a_lack_of_query(test_client):
+    response = test_client.http.get(url_string('/graphql'))
 
     assert response.status_code == 400
-    assert response_json(response) == {
+    assert response.json_body == {
         "errors": [
             {"message": "Must provide query string.", "locations": None, "path": None}
         ]
     }
 
 
-def test_handles_batch_correctly_if_is_disabled(app, client):
-    response = client.post(url_string(app), data="[]", content_type="application/json")
+def test_handles_batch_correctly_if_is_disabled(test_client):
+    response = test_client.http.post(url_string('/graphql'), body="[]", headers={'Content-Type': 'application/json'})
 
     assert response.status_code == 400
-    assert response_json(response) == {
+    assert response.json_body == {
         "errors": [
             {
                 "message": "Batch GraphQL requests are not enabled.",
@@ -424,54 +403,56 @@ def test_handles_batch_correctly_if_is_disabled(app, client):
     }
 
 
-def test_handles_incomplete_json_bodies(app, client):
-    response = client.post(
-        url_string(app), data='{"query":', content_type="application/json"
+def test_handles_incomplete_json_bodies(test_client):
+    response = test_client.http.post(
+        url_string('/graphql'), body='{"query":', headers={'Content-Type': 'application/json'}
     )
 
     assert response.status_code == 400
-    assert response_json(response) == {
+    assert response.json_body == {
         "errors": [
             {"message": "POST body sent invalid JSON.", "locations": None, "path": None}
         ]
     }
 
 
-def test_handles_plain_post_text(app, client):
-    response = client.post(
-        url_string(app, variables=json.dumps({"who": "Dolly"})),
-        data="query helloWho($who: String){ test(who: $who) }",
-        content_type="text/plain",
+def test_handles_plain_post_text(test_client):
+    response = test_client.http.post(
+        url_string('/graphql', variables=json.dumps({"who": "Dolly"})),
+        body="query helloWho($who: String){ test(who: $who) }",
+        headers={'Content-Type': 'text/plain'},
     )
     assert response.status_code == 400
-    assert response_json(response) == {
+    assert response.json_body == {
         "errors": [
             {"message": "Must provide query string.", "locations": None, "path": None}
         ]
     }
 
 
-def test_handles_poorly_formed_variables(app, client):
-    response = client.get(
+def test_handles_poorly_formed_variables(test_client):
+    response = test_client.http.get(
         url_string(
-            app,
+            '/graphql',
             query="query helloWho($who: String){ test(who: $who) }",
             variables="who:You",
         )
     )
     assert response.status_code == 400
-    assert response_json(response) == {
+    assert response.json_body == {
         "errors": [
             {"message": "Variables are invalid JSON.", "locations": None, "path": None}
         ]
     }
 
 
-def test_handles_unsupported_http_methods(app, client):
-    response = client.put(url_string(app, query="{test}"))
+def test_handles_unsupported_http_methods(test_client):
+    response = test_client.http.put(url_string('/graphql', query="{test}"))
     assert response.status_code == 405
-    assert response.headers["Allow"] in ["GET, POST", "HEAD, GET, POST, OPTIONS"]
-    assert response_json(response) == {
+    # TODO: Add this back in once Chalice supports returning the Allow header
+    # https://github.com/aws/chalice/issues/1583
+#    assert response.headers["Allow"] in ["GET, POST", "HEAD, GET, POST, OPTIONS"]
+    assert response.json_body == {
         "errors": [
             {
                 "message": "GraphQL only supports GET and POST requests.",
@@ -482,66 +463,41 @@ def test_handles_unsupported_http_methods(app, client):
     }
 
 
-def test_passes_request_into_request_context(app, client):
-    response = client.get(url_string(app, query="{request}", q="testing"))
+def test_passes_request_into_request_context(test_client):
+    response = test_client.http.get(url_string('/graphql', query="{request}", q="testing"))
 
     assert response.status_code == 200
-    assert response_json(response) == {"data": {"request": "testing"}}
+    assert response.json_body == {"data": {"request": "testing"}}
 
 
-@pytest.mark.parametrize("app", [create_app(context={"session": "CUSTOM CONTEXT"})])
-def test_passes_custom_context_into_context(app, client):
-    response = client.get(url_string(app, query="{context { session request }}"))
-
-    assert response.status_code == 200
-    res = response_json(response)
-    assert "data" in res
-    assert "session" in res["data"]["context"]
-    assert "request" in res["data"]["context"]
-    assert "CUSTOM CONTEXT" in res["data"]["context"]["session"]
-    assert "Request" in res["data"]["context"]["request"]
-
-
-@pytest.mark.parametrize("app", [create_app(context="CUSTOM CONTEXT")])
-def test_context_remapped_if_not_mapping(app, client):
-    response = client.get(url_string(app, query="{context { session request }}"))
-
-    assert response.status_code == 200
-    res = response_json(response)
-    assert "data" in res
-    assert "session" in res["data"]["context"]
-    assert "request" in res["data"]["context"]
-    assert "CUSTOM CONTEXT" not in res["data"]["context"]["request"]
-    assert "Request" in res["data"]["context"]["request"]
+# TODO: Chalice lacks support for multipart requests
+# https://github.com/aws/chalice/issues/796
+#def test_post_multipart_data(test_client):
+#    query = "mutation TestMutation { writeTest { test } }"
+#    response = test_client.http.post(
+#        url_string('/graphql'),
+#        body={"query": query, "file": (StringIO(), "text1.txt")},
+#        headers={'Content-Type': 'multipart/form-data'},
+#    )
+#
+#    assert response.status_code == 200
+#    assert response.json_body == {
+#        "data": {u"writeTest": {u"test": u"Hello World"}}
+#    }
 
 
-def test_post_multipart_data(app, client):
-    query = "mutation TestMutation { writeTest { test } }"
-    response = client.post(
-        url_string(app),
-        data={"query": query, "file": (StringIO(), "text1.txt")},
-        content_type="multipart/form-data",
-    )
-
-    assert response.status_code == 200
-    assert response_json(response) == {
-        "data": {u"writeTest": {u"test": u"Hello World"}}
-    }
-
-
-@pytest.mark.parametrize("app", [create_app(batch=True)])
-def test_batch_allows_post_with_json_encoding(app, client):
-    response = client.post(
-        url_string(app),
-        data=json_dump_kwarg_list(
+def test_batch_allows_post_with_json_encoding(test_client):
+    response = test_client.http.post(
+        url_string('/graphql/batch'),
+        body=json_dump_kwarg_list(
             # id=1,
             query="{test}"
         ),
-        content_type="application/json",
+        headers={'Content-Type': 'application/json'},
     )
 
     assert response.status_code == 200
-    assert response_json(response) == [
+    assert response.json_body == [
         {
             # 'id': 1,
             "data": {"test": "Hello World"}
@@ -549,20 +505,19 @@ def test_batch_allows_post_with_json_encoding(app, client):
     ]
 
 
-@pytest.mark.parametrize("app", [create_app(batch=True)])
-def test_batch_supports_post_json_query_with_json_variables(app, client):
-    response = client.post(
-        url_string(app),
-        data=json_dump_kwarg_list(
+def test_batch_supports_post_json_query_with_json_variables(test_client):
+    response = test_client.http.post(
+        url_string('/graphql/batch'),
+        body=json_dump_kwarg_list(
             # id=1,
             query="query helloWho($who: String){ test(who: $who) }",
             variables={"who": "Dolly"},
         ),
-        content_type="application/json",
+        headers={'Content-Type': 'application/json'},
     )
 
     assert response.status_code == 200
-    assert response_json(response) == [
+    assert response.json_body == [
         {
             # 'id': 1,
             "data": {"test": "Hello Dolly"}
@@ -570,11 +525,10 @@ def test_batch_supports_post_json_query_with_json_variables(app, client):
     ]
 
 
-@pytest.mark.parametrize("app", [create_app(batch=True)])
-def test_batch_allows_post_with_operation_name(app, client):
-    response = client.post(
-        url_string(app),
-        data=json_dump_kwarg_list(
+def test_batch_allows_post_with_operation_name(test_client):
+    response = test_client.http.post(
+        url_string('/graphql/batch'),
+        body=json_dump_kwarg_list(
             # id=1,
             query="""
             query helloYou { test(who: "You"), ...shared }
@@ -586,11 +540,11 @@ def test_batch_allows_post_with_operation_name(app, client):
             """,
             operationName="helloWorld",
         ),
-        content_type="application/json",
+        headers={'Content-Type': 'application/json'},
     )
 
     assert response.status_code == 200
-    assert response_json(response) == [
+    assert response.json_body == [
         {
             # 'id': 1,
             "data": {"test": "Hello World", "shared": "Hello Everyone"}

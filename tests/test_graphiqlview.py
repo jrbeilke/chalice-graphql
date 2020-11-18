@@ -1,38 +1,34 @@
+from urllib.parse import urlencode
+
+from chalice.test import Client
 import pytest
-from flask import url_for
 
-from .app import create_app
-
-
-@pytest.fixture
-def app():
-    # import app factory pattern
-    app = create_app(graphiql=True)
-
-    # pushes an application context manually
-    ctx = app.app_context()
-    ctx.push()
-    return app
+from .app import app
 
 
 @pytest.fixture
-def client(app):
-    return app.test_client()
+def test_client():
+    with Client(app) as client:
+        yield client
 
 
-def test_graphiql_is_enabled(app, client):
-    with app.test_request_context():
-        response = client.get(
-            url_for("graphql", externals=False), headers={"Accept": "text/html"}
-        )
+def url_string(path, **url_params):
+    if url_params:
+        path += "?" + urlencode(url_params)
+
+    return path
+
+
+def test_graphiql_is_enabled(test_client):
+    response = test_client.http.get('/graphql', headers={"Accept": "text/html"})
     assert response.status_code == 200
 
 
-def test_graphiql_renders_pretty(app, client):
-    with app.test_request_context():
-        response = client.get(
-            url_for("graphql", query="{test}"), headers={"Accept": "text/html"}
-        )
+def test_graphiql_renders_pretty(test_client):
+    response = test_client.http.get(
+        url_string('/graphql', query="{test}"),
+        headers={"Accept": "text/html"}
+    )
     assert response.status_code == 200
     pretty_response = (
         "{\n"
@@ -42,19 +38,9 @@ def test_graphiql_renders_pretty(app, client):
         "}".replace('"', '\\"').replace("\n", "\\n")
     )
 
-    assert pretty_response in response.data.decode("utf-8")
+    assert pretty_response in response.body.decode("utf-8")
 
 
-def test_graphiql_default_title(app, client):
-    with app.test_request_context():
-        response = client.get(url_for("graphql"), headers={"Accept": "text/html"})
-    assert "<title>GraphiQL</title>" in response.data.decode("utf-8")
-
-
-@pytest.mark.parametrize(
-    "app", [create_app(graphiql=True, graphiql_html_title="Awesome")]
-)
-def test_graphiql_custom_title(app, client):
-    with app.test_request_context():
-        response = client.get(url_for("graphql"), headers={"Accept": "text/html"})
-    assert "<title>Awesome</title>" in response.data.decode("utf-8")
+def test_graphiql_default_title(test_client):
+    response = test_client.http.get('/graphql', headers={"Accept": "text/html"})
+    assert "<title>GraphiQL</title>" in response.body.decode("utf-8")

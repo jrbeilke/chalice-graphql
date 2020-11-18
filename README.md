@@ -1,58 +1,54 @@
-# Flask-GraphQL
+# Chalice-GraphQL
 
-Adds GraphQL support to your Flask application.
+Adds [GraphQL] support to your [Chalice] application.
+
+Based on [flask-graphql] by [Syrus Akbary] and [aiohttp-graphql] by [Devin Fee].
 
 [![travis][travis-image]][travis-url]
-[![pypi][pypi-image]][pypi-url]
-[![Anaconda-Server Badge][conda-image]][conda-url]
 [![coveralls][coveralls-image]][coveralls-url]
 
-[travis-image]: https://travis-ci.org/graphql-python/flask-graphql.svg?branch=master
-[travis-url]: https://travis-ci.org/graphql-python/flask-graphql
-[pypi-image]: https://img.shields.io/pypi/v/flask-graphql.svg?style=flat
-[pypi-url]: https://pypi.org/project/flask-graphql/
-[coveralls-image]: https://coveralls.io/repos/graphql-python/flask-graphql/badge.svg?branch=master&service=github
-[coveralls-url]: https://coveralls.io/github/graphql-python/flask-graphql?branch=master
-[conda-image]: https://img.shields.io/conda/vn/conda-forge/flask-graphql.svg
-[conda-url]: https://anaconda.org/conda-forge/flask-graphql
+[GraphQL]: http://graphql.org/
+[Chalice]: https://aws.github.io/chalice/
+[Syrus Akbary]: https://github.com/syrusakbary
+[Devin Fee]: https://github.com/dfee
+[travis-image]: https://travis-ci.org/jrbeilke/chalice-graphql.svg?branch=master
+[travis-url]: https://travis-ci.org/jrbeilke/chalice-graphql
+[coveralls-image]: https://coveralls.io/repos/github/jrbeilke/chalice-graphql/badge.svg?branch=master
+[coveralls-url]: https://coveralls.io/github/jrbeilke/chalice-graphql?branch=master
 
 ## Usage
 
-Just use the `GraphQLView` view from `flask_graphql`
+Add the `GraphQLView` from `chalice_graphql` to dispatch requests for your desired route(s)
 
 ```python
-from flask import Flask
-from flask_graphql import GraphQLView
+from chalice import Chalice
+from chalice_graphql import GraphQLView
 
 from schema import schema
 
-app = Flask(__name__)
+app = Chalice(app_name='helloworld')
 
-app.add_url_rule('/graphql', view_func=GraphQLView.as_view(
-    'graphql',
-    schema=schema,
-    graphiql=True,
-))
+@app.route(
+    '/graphql',
+    methods=['GET', 'POST'],
+    content_types=['application/graphql', 'application/json', 'application/x-www-form-urlencoded']
+)
+def graphql():
+    gql_view = GraphQLView(schema=schema, graphiql=True)
+    return gql_view.dispatch_request(app.current_request)
 
 # Optional, for adding batch query support (used in Apollo-Client)
-app.add_url_rule('/graphql/batch', view_func=GraphQLView.as_view(
-    'graphql',
-    schema=schema,
-    batch=True
-))
-
-if __name__ == '__main__':
-    app.run()
+@app.route(
+    '/graphql/batch',
+    methods=['GET', 'POST'],
+    content_types=['application/graphql', 'application/json', 'application/x-www-form-urlencoded']
+)
+def graphql_batch():
+    gql_view = GraphQLView(schema=schema, batch=True)
+    return gql_view.dispatch_request(app.current_request)
 ```
 
 This will add `/graphql` endpoint to your app and enable the GraphiQL IDE.
-
-### Special Note for Graphene v3
-
-If you are using the `Schema` type of [Graphene](https://github.com/graphql-python/graphene) library, be sure to use the `graphql_schema` attribute to pass as schema on the `GraphQLView` view. Otherwise, the `GraphQLSchema` from `graphql-core` is the way to go.
-
-More info at [Graphene v3 release notes](https://github.com/graphql-python/graphene/wiki/v3-release-notes#graphene-schema-no-longer-subclasses-graphqlschema-type) and [GraphQL-core 3 usage](https://github.com/graphql-python/graphql-core#usage).
-
 
 ### Supported options for GraphQLView
 
@@ -73,16 +69,3 @@ More info at [Graphene v3 release notes](https://github.com/graphql-python/graph
  * `default_query`: An optional GraphQL string to use when no query is provided and no stored query exists from a previous session. If not provided, GraphiQL will use its own default query.
 * `header_editor_enabled`: An optional boolean which enables the header editor when true. Defaults to **false**.
 * `should_persist_headers`:  An optional boolean which enables to persist headers to storage when true. Defaults to **false**.
-
-You can also subclass `GraphQLView` and overwrite `get_root_value(self, request)` to have a dynamic root value
-per request.
-
-```python
-class UserRootValue(GraphQLView):
-    def get_root_value(self, request):
-        return request.user
-
-```
-
-## Contributing
-Since v3, `flask-graphql` code lives at [graphql-server](https://github.com/graphql-python/graphql-server) repository to keep any breaking change on the base package on sync with all other integrations. In order to contribute, please take a look at [CONTRIBUTING.md](https://github.com/graphql-python/graphql-server/blob/master/CONTRIBUTING.md).

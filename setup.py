@@ -1,12 +1,14 @@
 from setuptools import setup, find_packages
 
 install_requires = [
-    "graphql-server[flask]>=3.0.0b1",
+    "chalice>=1.21.4",
+    "graphql-server>=3.0.0b1",
 ]
 
 tests_requires = [
     "pytest>=5.4,<5.5",
     "pytest-cov>=2.8,<3",
+    "Jinja2>=2.10.1,<3",
 ]
 
 dev_requires = [
@@ -19,18 +21,18 @@ with open("README.md", encoding="utf-8") as readme_file:
     readme = readme_file.read()
 
 setup(
-    name="Flask-GraphQL",
-    version="2.0.1",
-    description="Adds GraphQL support to your Flask application",
+    name="Chalice-GraphQL",
+    version="0.1.0",
+    description="Adds GraphQL support to your Chalice application",
     long_description=readme,
     long_description_content_type="text/markdown",
-    url="https://github.com/graphql-python/flask-graphql",
-    download_url="https://github.com/graphql-python/flask-graphql/releases",
-    author="Syrus Akbary",
-    author_email="me@syrusakbary.com",
+    url="https://github.com/jrbeilke/chalice-graphql",
+    download_url="https://github.com/jrbeilke/chalice-graphql/releases",
+    author="Jon Beilke",
+    author_email="jrbeilke@gmail.com",
     license="MIT",
     classifiers=[
-        "Development Status :: 5 - Production/Stable",
+        "Development Status :: 4 - Beta",
         "Intended Audience :: Developers",
         "Topic :: Software Development :: Libraries",
         "Programming Language :: Python :: 3.6",
@@ -38,7 +40,7 @@ setup(
         "Programming Language :: Python :: 3.8",
         "License :: OSI Approved :: MIT License",
     ],
-    keywords="api graphql protocol rest flask",
+    keywords="api graphql protocol rest chalice",
     packages=find_packages(exclude=["tests"]),
     install_requires=install_requires,
     tests_require=tests_requires,

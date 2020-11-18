@@ -4,7 +4,7 @@ include README.md
 include tox.ini
 include Makefile
 
-recursive-include flask_graphql *.py
+recursive-include chalice_graphql *.py
 recursive-include tests *.py
 
 global-exclude *.py[co] __pycache__
